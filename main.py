@@ -2,13 +2,8 @@ import asyncio
 import webbrowser
 
 # We are not running a local web server for the redirect_uri with this specific flow.
-# The redirect_uri for the 'kitemcp' API key is likely handled internally by fastmcp possibly  by using the SSE connection.
-# that is held by the client
 # The login flow is initiated by calling the 'login' tool and it returns a URL that the user must open in their browser to complete the login process.
 # The user must then confirm they have logged in by pressing Enter in the terminal.
-# This script is designed to work with the fastmcp client to handle the login flow for Kite.
-# This script is designed to demonstrate how to use the fastmcp client to log in to Kite and fetch holdings.
-# Your role is to guide the user and wait for their confirmation.
 
 async def main():
 
