@@ -11,6 +11,8 @@ from openai import OpenAI
 import re
 from dotenv import load_dotenv
 import os
+import json
+import logging
 
 load_dotenv()  # Load variables from .env into the environment
 app = FastAPI()
@@ -36,107 +38,102 @@ def load_holdings(path="holdings.csv"):
         return list(reader)
 
 
+# configure basic logging to stdout
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
 def expand_query_with_gpt(company_name, sector, description):
     prompt = (
-        f"Given the company name '{company_name}', its sector '{sector}', and description:\n"
-        f"{description}\n\n"
-        "List and explain all key factors that can influence the stock price of this company. Include:\n\n"
-        "- Macroeconomic Factors: RBI interest rate changes, inflation, fiscal policy, and global economic trends\n"
-        "- Regulatory Environment: sector-specific rules (e.g., IRDAI, SEBI), FDI policy, tax law changes\n"
-        "- Industry Trends: digital adoption, growth or contraction, consumer behavior, innovation in the sector\n"
-        "- Company-Specific Fundamentals: earnings, guidance, partnerships, new products, M&A, promoter actions\n"
-        "- Competitive Landscape: peer moves, pricing pressure, market share shifts\n"
-        "- Parent or Group Influence: performance of parent/group companies\n"
-        "- Board Member and Executive News: appointments, resignations, controversies, statements\n"
-        "- Media and Market Sentiment: headlines, analyst ratings, social media buzz\n\n"
-        "Now, generate a **single enriched search query string** (max 150 characters) using relevant keywords from above that may help find news affecting the company's stock."
+        f"You are a financial news analyst.\n"
+        f"Company: “{company_name}” (sector: {sector})\n"
+        f"Description:\n{description}\n\n"
+        "List the 8 most important keywords that drive its share price, "
+        "then output **only** a single space-separated string of those keywords "
+        "(max 150 chars)."
     )
     try:
-        response = client.chat.completions.create(
+        logging.info(f"[GPT] expand_query for {company_name!r}")
+        resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
-        return response.choices[0].message.content.strip()
+        enriched = resp.choices[0].message.content.strip()
+        logging.info(f"[GPT] enriched_query: {enriched}")
+        return enriched
     except Exception as e:
-        print(f"⚠️ GPT enrichment failed: {e}")
-        return company_name
+        logging.error(f"⚠️ enrich failed for {company_name!r}: {e}")
+        return company_name  # fallback to company name
 
-
-def is_article_relevant(article_title, article_desc, company_name, enriched_query):
-    content = f"Title: {article_title}\nDescription: {article_desc}\n"
+def is_article_relevant(article, company_name, enriched_query, threshold=1):
+    title = article.get("title", "")
+    desc  = article.get("description", "")
+    # 1) Primary: binary GPT check
     prompt = (
-        f"Given the following article:\n{content}\n\n"
-        f"Is this article relevant to the stock performance or business developments of '{company_name}'? "
-        f"Use the context of this enriched keyword list: {enriched_query}.\n"
-        "Respond only with 'yes' or 'no'."
+        f"You are a news classifier.\n"
+        f"Title: {title}\n"
+        f"Description: {desc}\n"
+        f"Keywords: {enriched_query}\n\n"
+        "Answer **exactly** YES if any keyword directly relates to this company’s business or stock performance; otherwise NO."
     )
     try:
-        response = client.chat.completions.create(
+        logging.info(f"[GPT] relevance check for article: {title!r}")
+        resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
         )
-        return response.choices[0].message.content.strip().lower() == "yes"
+        answer = resp.choices[0].message.content.strip().upper()
+        logging.info(f"[GPT] raw answer: {answer!r}")
+        if answer == "YES":
+            return True
     except Exception as e:
-        print(f"GPT relevance check failed: {e}")
-        return False
+        logging.error(f"⚠️ relevance GPT error on {title!r}: {e}")
 
+    # 2) Fallback: simple keyword‐presence scan
+    text = (title + " " + desc).lower()
+    for kw in enriched_query.split():
+        if len(kw) > 2 and kw.lower() in text:
+            logging.info(f"[fallback] matched keyword “{kw}” in article {title!r}")
+            return True
+
+    return False
 
 @app.get("/", response_class=HTMLResponse)
 async def homepage(request: Request):
     holdings = load_holdings()
+    all_articles = requests.get(
+        GNEWS_ENDPOINT,
+        params={"topic": "business","lang": "en","country": "in","max": 50,"token": GNEWS_API_KEY}
+    ).json().get("articles", [])
+
     holdings_with_news = []
-
-    # Fetch business news
-    params = {
-        "topic": "business",
-        "lang": "en",
-        "country": "in",
-        "max": 50,
-        "token": GNEWS_API_KEY
-    }
-    resp = requests.get(GNEWS_ENDPOINT, params=params)
-    if resp.status_code != 200:
-        print(f"❌ GNews failed: {resp.status_code} - {resp.text}")
-        return templates.TemplateResponse("holdings.html", {"request": request, "data": []})
-
-    data = resp.json()
-    all_articles = data.get("articles", [])
-    seen_urls = set()
-
     for h in holdings:
-        tradingsymbol = h["tradingsymbol"].strip()
-        relevant_articles = []
-
-        if not tradingsymbol:
+        symbol = h["tradingsymbol"].strip()
+        if not symbol:
             continue
 
-        yf_ticker = yf.Ticker(f"{tradingsymbol}.NS")
-        info = yf_ticker.info
-        company_name = info.get("longName", tradingsymbol)
+        logging.info(f"Processing {symbol}")
+        info = yf.Ticker(f"{symbol}.NS").info
+        name = info.get("longName", symbol)
         sector = info.get("sector", "")
-        description = info.get("longBusinessSummary", "")
+        desc = info.get("longBusinessSummary", "")
 
-        enriched_query = expand_query_with_gpt(company_name, sector, description)
+        enriched_query = expand_query_with_gpt(name, sector, desc)
+        logging.info(f"[DEBUG] enriched_query for {symbol}: {enriched_query}")
 
-        for article in all_articles:
-            url = article.get("url")
-            if url in seen_urls:
-                continue
+        relevant = []
+        for art in all_articles:
+            if is_article_relevant(art, name, enriched_query):
+                relevant.append(art)
 
-            title = article.get("title", "")
-            desc = article.get("description", "")
-            if is_article_relevant(title, desc, company_name, enriched_query):
-                relevant_articles.append(article)
-                seen_urls.add(url)
-
+        logging.info(f"{symbol}: found {len(relevant)} relevant articles")
         holdings_with_news.append({
-            "symbol":     tradingsymbol,
-            "quantity":   h["quantity"],
-            "avg_price":  h["average_price"],
-            "last_price": h["last_price"],
-            "articles":   relevant_articles
+            "symbol":        symbol,
+            "quantity":      h["quantity"],
+            "avg_price":     h["average_price"],
+            "last_price":    h["last_price"],
+            "enriched_query": enriched_query,   # pass it through so you can print in the template
+            "articles":      relevant
         })
 
     return templates.TemplateResponse(

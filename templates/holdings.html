@@ -8,6 +8,7 @@
         h2 { margin-top: 0; }
         ul { padding-left: 20px; }
         li { margin-bottom: 10px; }
+        small { color: #666; }
     </style>
 </head>
 <body>
@@ -18,12 +19,17 @@
         <p>📦 Quantity: {{ holding.quantity }} | 💰 Avg Price: ₹{{ holding.avg_price }} | 📈 Last Price: ₹{{ holding.last_price }}</p>
         <h3>📰 Relevant News</h3>
         <ul>
-        {% for article in holding.articles %}
-            <li><a href="{{ article.url }}" target="_blank">{{ article.title }}</a> – {{ article.source.name }} • {{ article.publishedAt[:10] }}</li>
-        {% else %}
-            <li><i>No relevant news found.</i></li>
-        {% endfor %}
+            {% for article in holding.articles %}
+                <li>
+                  <a href="{{ article.url }}" target="_blank">{{ article.title }}</a>
+                  – {{ article.source.name }} • {{ article.publishedAt[:10] }}
+                </li>
+            {% else %}
+                <li><i>No relevant news found.</i></li>
+            {% endfor %}
         </ul>
+        <!-- Moved outside the <ul> and corrected variable name -->
+        <p><small>🔍 Keywords: {{ holding.enriched_query }}</small></p>
     </div>
     {% endfor %}
 </body>
