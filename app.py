@@ -2,17 +2,17 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from newsapi import NewsApiClient
-from newsapi.newsapi_exception import NewsAPIException
+import requests
 import csv
-
+import os
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# ← your NewsAPI key:
-newsapi = NewsApiClient(api_key="066812ee48ac40448e0ec0bc53903897")
+# GNews API key
+GNEWS_API_KEY = "bff075c4b9fc381c5273d513d0ff7e19"  # Replace this with your key
+GNEWS_ENDPOINT = "https://gnews.io/api/v4/search"
 
 def load_holdings(path="holdings.csv"):
     with open(path, newline="") as f:
@@ -22,28 +22,28 @@ def load_holdings(path="holdings.csv"):
 @app.get("/", response_class=HTMLResponse)
 async def homepage(request: Request):
     holdings = load_holdings()
-
     holdings_with_news = []
+
     for h in holdings:
         tradingsymbol = h["tradingsymbol"].strip()
         articles = []
 
         if tradingsymbol:
             try:
-                # fetch top 3 matching articles
-                resp = newsapi.get_everything(
-                    q=tradingsymbol,
-                    language="en",
-                    sort_by="publishedAt",
-                    page_size=3
-                )
-                articles = resp.get("articles", [])
-            except NewsAPIException as e:
-                # If NewsAPI complains about missing parameters, log & skip
-                print(f"⚠️ NewsAPIException for '{tradingsymbol}': {e}")
-                # —or fallback to top-headlines if you prefer:
-                # top = newsapi.get_top_headlines(country="in", page_size=3)
-                # articles = top.get("articles", [])
+                params = {
+                    "q": tradingsymbol,
+                    "lang": "en",
+                    "max": 3,
+                    "token": GNEWS_API_KEY
+                }
+                resp = requests.get(GNEWS_ENDPOINT, params=params)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    articles = data.get("articles", [])
+                else:
+                    print(f"⚠️ GNews API error for '{tradingsymbol}': {resp.status_code} - {resp.text}")
+            except Exception as e:
+                print(f"⚠️ Error fetching GNews for '{tradingsymbol}': {e}")
         else:
             print("⚠️ Skipping empty symbol entry")
 
