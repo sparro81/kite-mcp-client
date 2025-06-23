@@ -4,20 +4,28 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import requests
 import csv
-import os
+import yfinance as yf
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# GNews API key
-GNEWS_API_KEY = "bff075c4b9fc381c5273d513d0ff7e19"  # Replace this with your key
+GNEWS_API_KEY = "bff075c4b9fc381c5273d513d0ff7e19"
 GNEWS_ENDPOINT = "https://gnews.io/api/v4/search"
 
 def load_holdings(path="holdings.csv"):
     with open(path, newline="") as f:
         reader = csv.DictReader(f)
         return list(reader)
+
+def get_company_name(ticker):
+    try:
+        full_ticker = f"{ticker}.NS"  # NSE-specific
+        stock = yf.Ticker(full_ticker)
+        return stock.info.get("longName") or stock.info.get("shortName") or ticker
+    except Exception as e:
+        print(f"⚠️ Could not fetch company name for {ticker}: {e}")
+        return ticker  # fallback
 
 @app.get("/", response_class=HTMLResponse)
 async def homepage(request: Request):
@@ -27,11 +35,16 @@ async def homepage(request: Request):
     for h in holdings:
         tradingsymbol = h["tradingsymbol"].strip()
         articles = []
+        query_term = tradingsymbol
 
         if tradingsymbol:
+            company_name = get_company_name(tradingsymbol)
+            query_term = company_name if company_name else tradingsymbol
+            print(f"🔍 Searching GNews for: '{query_term}'")
+
             try:
                 params = {
-                    "q": tradingsymbol,
+                    "q": query_term,
                     "lang": "en",
                     "max": 3,
                     "token": GNEWS_API_KEY
@@ -41,9 +54,9 @@ async def homepage(request: Request):
                     data = resp.json()
                     articles = data.get("articles", [])
                 else:
-                    print(f"⚠️ GNews API error for '{tradingsymbol}': {resp.status_code} - {resp.text}")
+                    print(f"⚠️ GNews API error for '{query_term}': {resp.status_code} - {resp.text}")
             except Exception as e:
-                print(f"⚠️ Error fetching GNews for '{tradingsymbol}': {e}")
+                print(f"⚠️ Error fetching GNews for '{query_term}': {e}")
         else:
             print("⚠️ Skipping empty symbol entry")
 
