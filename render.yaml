@@ -14,7 +14,7 @@ services:
 
     # 1) Install deps, 2) initialize the DB, all in one build step
     buildCommand: >
-      uv pip sync &&
+      uv pip sync uv.lock && 
       python -c 'import asyncio; from database import create_db_and_tables; asyncio.run(create_db_and_tables())'
 
     # No more preDeployCommand
