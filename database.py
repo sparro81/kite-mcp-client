@@ -8,11 +8,16 @@ from fastapi_users.db import SQLAlchemyUserDatabase
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import  sessionmaker
 
+
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
+_raw_db_url = os.getenv("DATABASE_URL", "")
+# transform to asyncpg driver
+if _raw_db_url.startswith("postgres://"):
+    DATABASE_URL = _raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+else:
+    DATABASE_URL = _raw_db_url
 
-
-engine = create_async_engine(DATABASE_URL)
+engine = create_async_engine(DATABASE_URL, echo=True)
 async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 async def create_db_and_tables():
