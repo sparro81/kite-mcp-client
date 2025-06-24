@@ -46,9 +46,17 @@ def expand_query_with_gpt(company_name, sector, description):
         f"You are a financial news analyst.\n"
         f"Company: “{company_name}” (sector: {sector})\n"
         f"Description:\n{description}\n\n"
-        "List the 8 most important keywords that drive its share price, "
+        "List the 8 most important news items that drive its share price, "
+        "for example for financial stocks, Interest rates, Inflation, GDP, etc. "
+        "for consumer stocks, consumer spending, inflation, etc. "
+        "for technology stocks, new product launches, etc. "
+        "for healthcare stocks, new drug approvals, etc. "
+        "for energy stocks, oil prices, etc. "
+        "for industrials stocks, new orders, etc. "
+        "for utilities stocks, new regulations, etc. "
+        "for telecom stocks, new data plans, etc. "
         "then output **only** a single space-separated string of those keywords "
-        "(max 150 chars)."
+        
     )
     try:
         logging.info(f"[GPT] expand_query for {company_name!r}")
@@ -73,7 +81,9 @@ def is_article_relevant(article, company_name, enriched_query, threshold=1):
         f"Title: {title}\n"
         f"Description: {desc}\n"
         f"Keywords: {enriched_query}\n\n"
-        "Answer **exactly** YES if any keyword directly relates to this company’s business or stock performance; otherwise NO."
+        "Check if the article is relevant to the company's business or stock performance. "
+        "If it is, return a relevant score between 0 and 100. "
+        "If it is not, return a score of 0."
     )
     try:
         logging.info(f"[GPT] relevance check for article: {title!r}")
