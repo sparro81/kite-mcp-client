@@ -1,33 +1,32 @@
 # render.yaml
 
-# 1. The managed PostgreSQL database
+# 1. Managed Postgres stays under top-level `databases:`
 databases:
   - name: fintech-postgres-db
-    # 'plan' can be free, starter, standard, etc.
     plan: free
 
-# 2. The FastAPI web service
+# 2. Your FastAPI service
 services:
   - type: web
     name: fintech-app
     env: python
     plan: free
-    # Install your dependencies
-    buildCommand: "uv pip sync"
-    # Run any migrations or table-creation before starting
-    preDeployCommand: >
+
+    # 1) Install deps, 2) initialize the DB, all in one build step
+    buildCommand: >
+      uv pip sync &&
       python -c "import asyncio; \
-      from database import create_db_and_tables; \
-      asyncio.run(create_db_and_tables())"
-    # Launch Uvicorn on the assigned $PORT
+    from database import create_db_and_tables; \
+    asyncio.run(create_db_and_tables())"
+
+    # No more preDeployCommand
     startCommand: "uv run --host 0.0.0.0 --port $PORT app:app"
+
     envVars:
-      # automatically inject DATABASE_URL from the database above
       - key: DATABASE_URL
         fromDatabase:
           name: fintech-postgres-db
           property: connectionString
-      # pull all your other secrets from this group
       - fromGroup: fintech-app-secrets
       - key: PYTHON_VERSION
         value: "3.11"
