@@ -27,4 +27,4 @@ services:
           property: connectionString
       - fromGroup: fintech-app-secrets
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.0"
