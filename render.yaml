@@ -5,7 +5,7 @@
 services:
   # 1. The PostgreSQL Database
   # This service creates a managed PostgreSQL database for your app.
-  - type: postgres
+  - type: psql
     name: fintech-postgres-db
     # The 'plan' determines performance and cost. 'free' is great for development.
     plan: free
