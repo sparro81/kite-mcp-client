@@ -17,8 +17,8 @@ services:
       uv sync  
     # python -c 'import asyncio; from database import create_db_and_tables; asyncio.run(create_db_and_tables())'
 
-    # No more preDeployCommand
-    startCommand: "uv run --host 0.0.0.0 --port $PORT app:app"
+
+    startCommand: "uv run app.py"
 
     envVars:
       - key: DATABASE_URL
